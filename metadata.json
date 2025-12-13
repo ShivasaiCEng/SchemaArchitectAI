@@ -1,0 +1,5 @@
+{
+  "name": "Copy of SchemaArchitect AI",
+  "description": "Visual database schema designer that uses Gemini 2.5 Flash to generate production-ready backend code (Mongoose, Express, Zod) from your visual diagrams.",
+  "requestFramePermissions": []
+}

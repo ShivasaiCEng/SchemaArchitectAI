@@ -5,7 +5,6 @@ export const HEADER_HEIGHT = 40;
 export const FIELD_HEIGHT = 32;
 
 export const FIELD_TYPES = Object.values(FieldType);
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export const RELATION_TYPES = Object.values(RelationType);
 
 export const SAMPLE_SCHEMA_TABLES = [

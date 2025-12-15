@@ -36,7 +36,7 @@ const AuthModal = ({ mode, onClose, onAuthSuccess, onSwitchMode }) => {
         : { email, password };
 
       // Call backend API
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

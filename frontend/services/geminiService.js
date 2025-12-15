@@ -55,18 +55,70 @@ Example:
 ]
 `;
 
+// List of models to try - use any that works
+const MODELS_TO_TRY = [
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-pro",
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro-002",
+  "gemini-2.0-flash-exp"
+];
+
+// Try to generate with a specific model
+const tryModel = async (ai, model, prompt, dbType) => {
+  const response = await ai.models.generateContent({
+    model: model,
+    contents: prompt,
+    config: {
+      systemInstruction: getSystemInstruction(dbType),
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            filename: { type: Type.STRING },
+            content: { type: Type.STRING },
+            type: { type: Type.STRING, enum: ["model", "route", "validation", "server"] },
+          },
+          required: ["filename", "content", "type"]
+        }
+      }
+    }
+  });
+
+  const jsonText = response.text;
+  if (!jsonText) throw new Error("Empty response from AI");
+
+  return JSON.parse(jsonText);
+};
+
 export const generateBackendCode = async (
   tables,
   relations,
   dbType
 ) => {
   
-  // Try to use backend API first
+  // Try to use backend API first (it has better model fallback logic)
   try {
     // Get API key from localStorage if available
     const userApiKey = localStorage.getItem('gemini_api_key');
     
-    const response = await fetch(`${API_BASE_URL}/api/generate`, {
+    // Log which API key is being used
+    if (userApiKey) {
+      const keyPreview = userApiKey.substring(0, 10) + '...';
+      console.log(`🔑 Frontend using API key from localStorage: ${keyPreview}`);
+    } else {
+      console.log(`🔑 Frontend: No API key in localStorage, will use backend .env key`);
+    }
+    
+    if (!userApiKey) {
+      throw new Error('API_KEY_REQUIRED');
+    }
+    
+    const response = await fetch('http://localhost:5000/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,26 +127,45 @@ export const generateBackendCode = async (
         tables, 
         relations, 
         dbType,
-        ...(userApiKey && { apiKey: userApiKey })
+        apiKey: userApiKey
       }),
     });
 
     if (response.ok) {
       const files = await response.json();
       return files;
+    } else {
+      // Handle error responses
+      const errorData = await response.json().catch(() => ({}));
+      
+      if (response.status === 429 || errorData.error === 'QUOTA_EXCEEDED') {
+        throw new Error('QUOTA_EXCEEDED: ' + (errorData.message || 'API quota exceeded'));
+      }
+      
+      if (response.status === 401 || errorData.error === 'INVALID_API_KEY' || errorData.error === 'API_KEY_REQUIRED') {
+        throw new Error('INVALID_API_KEY: ' + (errorData.message || 'Invalid API key'));
+      }
+      
+      throw new Error(errorData.message || 'Failed to generate code');
     }
   } catch (error) {
+    // Re-throw API key errors so they can be handled by the caller
+    if (error.message?.includes('API_KEY_REQUIRED') || error.message?.includes('INVALID_API_KEY')) {
+      throw error;
+    }
     console.warn('Backend API not available, using client-side generation:', error);
   }
 
   // FALLBACK: Use client-side generation
-  // FALLBACK: Use Mock Generator if API Key is missing or explicitly requested
-  if (!import.meta.env.VITE_GEMINI_API_KEY && !process.env.API_KEY) {
+  // Get API key from localStorage first, then fall back to env vars
+  const userApiKey = localStorage.getItem('gemini_api_key');
+  const apiKey = userApiKey || import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
+  
+  // FALLBACK: Use Mock Generator if API Key is missing
+  if (!apiKey) {
     console.warn("API Key missing. Using Mock Generator.");
-    return generateMockCode(tables, relations, dbType);
+    throw new Error('API_KEY_REQUIRED');
   }
-
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
   const ai = new GoogleGenAI({ apiKey });
 
   const schemaPayload = JSON.stringify({ tables, relations }, null, 2);
@@ -108,35 +179,73 @@ export const generateBackendCode = async (
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: getSystemInstruction(dbType),
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              filename: { type: Type.STRING },
-              content: { type: Type.STRING },
-              type: { type: Type.STRING, enum: ["model", "route", "validation", "server"] },
-            },
-            required: ["filename", "content", "type"]
-          }
+    // Try each model in the list until one succeeds
+    let lastError = null;
+    
+    for (const model of MODELS_TO_TRY) {
+      try {
+        console.log(`🔄 Trying model: ${model}`);
+        const result = await tryModel(ai, model, prompt, dbType);
+        console.log(`✅ Successfully generated with model: ${model}`);
+        return result;
+      } catch (error) {
+        console.warn(`❌ Model ${model} failed:`, error.message?.substring(0, 100));
+        lastError = error;
+        
+        // Check if model doesn't exist (404) - skip it and try next
+        const isNotFound = error.status === 404 || 
+                          error.message?.includes('not found') ||
+                          error.message?.includes('NOT_FOUND');
+        
+        if (isNotFound) {
+          console.log(`⏭️ Model ${model} not found. Trying next model...`);
+          continue; // Skip this model and try next one
         }
-      },
-    });
+        
+        // Check if this is a quota/rate limit error - try next model
+        const isQuotaError = error.status === 429 || 
+                           error.message?.includes('quota') ||
+                           error.message?.includes('RESOURCE_EXHAUSTED') ||
+                           error.message?.includes('limit: 0');
+        
+        if (isQuotaError) {
+          console.log(`⏭️ Model ${model} has quota issues. Trying next model...`);
+          continue; // Try next model
+        }
+        
+        // If it's not a quota/availability/not found error, don't try other models
+        // (e.g., invalid API key, malformed request, etc.)
+        throw error;
+      }
+    }
 
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("Empty response from AI");
-
-    return JSON.parse(jsonText);
-
+    // If all models failed, handle the error
+    if (lastError) {
+      console.error("Gemini Generation Error (all models failed):", lastError);
+      
+      // Re-throw API key and quota errors
+      if (lastError.message?.includes('API_KEY_REQUIRED') || 
+          lastError.message?.includes('INVALID_API_KEY') ||
+          lastError.message?.includes('QUOTA_EXCEEDED')) {
+        throw lastError;
+      }
+      
+      // Fallback to mock if API fails for other reasons
+      console.warn("Falling back to mock code generator...");
+      return generateMockCode(tables, relations, dbType);
+    }
   } catch (error) {
     console.error("Gemini Generation Error:", error);
-    // Fallback to mock if API fails
+    
+    // Re-throw API key and quota errors
+    if (error.message?.includes('API_KEY_REQUIRED') || 
+        error.message?.includes('INVALID_API_KEY') ||
+        error.message?.includes('QUOTA_EXCEEDED')) {
+      throw error;
+    }
+    
+    // Fallback to mock if API fails for other reasons
+    console.warn("Falling back to mock code generator...");
     return generateMockCode(tables, relations, dbType);
   }
 };

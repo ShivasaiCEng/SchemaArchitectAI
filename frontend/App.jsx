@@ -30,6 +30,7 @@ function AppContent() {
   });
   const [authMode, setAuthMode] = useState(null);
   const [showGeminiModal, setShowGeminiModal] = useState(false);
+  const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false);
 
   // --- App State ---
   const [tables, setTables] = useState(SAMPLE_SCHEMA_TABLES);
@@ -81,6 +82,14 @@ function AppContent() {
   
   const handleGeminiKeySave = async (apiKey) => {
      showToast('Gemini API key saved successfully!');
+     // If user was trying to generate, automatically trigger generation
+     if (shouldAutoGenerate) {
+       setShouldAutoGenerate(false);
+       // Small delay to ensure modal closes first
+       setTimeout(() => {
+         handleGenerate();
+       }, 300);
+     }
   };
 
   const handleLogout = () => {
@@ -100,7 +109,7 @@ function AppContent() {
     
     if (token && savedUser) {
       // Verify token with backend
-      fetch(`${API_BASE_URL}/api/auth/verify`, {
+      fetch('http://localhost:5000/api/auth/verify', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -322,20 +331,44 @@ function AppContent() {
   };
 
   const handleGenerate = async () => {
+    // Check if API key exists in localStorage
+    const userApiKey = localStorage.getItem('gemini_api_key');
+    
+    // If no API key, show modal to ask for it
+    if (!userApiKey) {
+      setShouldAutoGenerate(true); // Mark that we should generate after key is saved
+      setShowGeminiModal(true);
+      showToast("Please provide your Gemini API key to generate code");
+      return;
+    }
+
     setIsGenerating(true);
     try {
-      // Use mock if no API key or logic fails
+      // Use API key for generation
       const files = await generateBackendCode(tables, relations, targetDb);
       setGeneratedFiles(files);
       setShowCode(true);
-      if (!process.env.API_KEY) {
-        showToast("Generated using Mock Engine (No API Key detected)");
-      } else {
-        showToast(`Generated for ${targetDb.toUpperCase()} successfully!`);
-      }
+      showToast(`Generated for ${targetDb.toUpperCase()} successfully!`);
     } catch (e) {
-      // Fallback
-      showToast("Generation failed. See console.");
+      console.error("Generation error:", e);
+      
+      // Check if it's a quota/rate limit error
+      if (e.message?.includes('QUOTA_EXCEEDED') || e.message?.includes('quota') || e.message?.includes('429')) {
+        const quotaMessage = e.message.replace('QUOTA_EXCEEDED: ', '');
+        showToast(quotaMessage || "API quota exceeded. Please try again later or upgrade your plan.");
+        return;
+      }
+      
+      // Check if it's an API key error
+      if (e.message?.includes('API_KEY_REQUIRED') || e.message?.includes('INVALID_API_KEY') || e.message?.includes('401') || e.message?.includes('403')) {
+        showToast("Invalid or missing API key. Please provide a valid Gemini API key.");
+        // Clear invalid key and show modal
+        localStorage.removeItem('gemini_api_key');
+        setShouldAutoGenerate(true);
+        setShowGeminiModal(true);
+      } else {
+        showToast("Generation failed: " + (e.message || "See console for details"));
+      }
     } finally {
       setIsGenerating(false);
     }

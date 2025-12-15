@@ -5,7 +5,11 @@ import { X, Key, ExternalLink, CheckCircle2, Loader2, Sparkles } from 'lucide-re
 
 const GeminiApiKeyModal = ({ onClose, onSave }) => {
   const { isDark } = useTheme();
-  const [apiKey, setApiKey] = useState('');
+  // Load existing API key from localStorage if available
+  const [apiKey, setApiKey] = useState(() => {
+    const existing = localStorage.getItem('gemini_api_key');
+    return existing || '';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -267,13 +271,26 @@ const GeminiApiKeyModal = ({ onClose, onSave }) => {
 
           {/* API Key Input */}
           <div className="space-y-2 mb-6">
-            <label 
-              className="text-xs font-bold uppercase ml-1 flex items-center gap-2"
-              style={{ color: isDark ? '#71717a' : '#52525b' }}
-            >
-              <Key size={14} />
-              Gemini API Key
-            </label>
+            <div className="flex items-center justify-between">
+              <label 
+                className="text-xs font-bold uppercase ml-1 flex items-center gap-2"
+                style={{ color: isDark ? '#71717a' : '#52525b' }}
+              >
+                <Key size={14} />
+                Gemini API Key
+              </label>
+              {apiKey && (
+                <span 
+                  className="text-xs px-2 py-1 rounded"
+                  style={{ 
+                    backgroundColor: isDark ? '#27272a' : '#e4e4e7',
+                    color: isDark ? '#a3e635' : '#65a30d'
+                  }}
+                >
+                  Current: {apiKey.substring(0, 10)}...
+                </span>
+              )}
+            </div>
             <div className="relative">
               <input
                 type="password"
@@ -308,6 +325,21 @@ const GeminiApiKeyModal = ({ onClose, onSave }) => {
             >
               Your API key is stored locally and never shared with our servers
             </p>
+            {apiKey && (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('gemini_api_key');
+                  setApiKey('');
+                  setError(null);
+                }}
+                className="text-xs font-medium transition-colors mt-2"
+                style={{ color: isDark ? '#ef4444' : '#dc2626' }}
+                onMouseEnter={(e) => e.target.style.color = isDark ? '#f87171' : '#fca5a5'}
+                onMouseLeave={(e) => e.target.style.color = isDark ? '#ef4444' : '#dc2626'}
+              >
+                Clear existing API key
+              </button>
+            )}
           </div>
 
           {/* Action Buttons */}

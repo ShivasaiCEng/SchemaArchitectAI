@@ -60,37 +60,21 @@ Example:
 ]
 `;
 
-export const generateBackendCode = async (
-  tables,
-  relations,
-  dbType,
-  apiKey = null
-) => {
-  
-  // Use provided API key or fall back to environment variable
-  const geminiApiKey = apiKey || process.env.GEMINI_API_KEY;
-  
-  // FALLBACK: Use Mock Generator if API Key is missing or explicitly requested
-  if (!geminiApiKey) {
-    console.warn("API Key missing. Using Mock Generator.");
-    return generateMockCode(tables, relations, dbType);
-  }
+// List of models to try - use any that works
+const MODELS_TO_TRY = [
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-pro",
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro-002",
+  "gemini-2.0-flash-exp"
+];
 
-  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-
-  const schemaPayload = JSON.stringify({ tables, relations }, null, 2);
-
-  const prompt = `
-    Here is the database schema structure:
-    ${schemaPayload}
-
-    Generate the complete backend code for ${dbType}.
-    Ensure the code is PRETTY-PRINTED (not minified).
-  `;
-
-  try {
+// Try to generate with a specific model
+const tryModel = async (ai, model, prompt, dbType) => {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+    model: model,
       contents: prompt,
       config: {
         systemInstruction: getSystemInstruction(dbType),
@@ -121,22 +105,130 @@ export const generateBackendCode = async (
     }
 
     return parsed;
+};
 
+export const generateBackendCode = async (
+  tables,
+  relations,
+  dbType,
+  apiKey = null
+) => {
+  
+  // Use provided API key or fall back to environment variable
+  const geminiApiKey = apiKey || process.env.GEMINI_API_KEY;
+  
+  // Log which API key is being used (first 10 chars for security)
+  const apiKeySource = apiKey ? 'REQUEST_BODY' : 'ENV_FILE';
+  const apiKeyPreview = geminiApiKey ? geminiApiKey.substring(0, 10) + '...' : 'NONE';
+  console.log(`🔑 Using API key from: ${apiKeySource} | Key: ${apiKeyPreview}`);
+  
+  // FALLBACK: Use Mock Generator if API Key is missing or explicitly requested
+  if (!geminiApiKey) {
+    console.warn("API Key missing. Using Mock Generator.");
+    return generateMockCode(tables, relations, dbType);
+  }
+
+  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+
+  const schemaPayload = JSON.stringify({ tables, relations }, null, 2);
+
+  const prompt = `
+    Here is the database schema structure:
+    ${schemaPayload}
+
+    Generate the complete backend code for ${dbType}.
+    Ensure the code is PRETTY-PRINTED (not minified).
+  `;
+
+  try {
+    // Try each model in the list until one succeeds
+    let lastError = null;
+    
+    for (const model of MODELS_TO_TRY) {
+      try {
+        console.log(`🔄 Trying model: ${model}`);
+        const result = await tryModel(ai, model, prompt, dbType);
+        console.log(`✅ Successfully generated with model: ${model}`);
+        return result;
+      } catch (error) {
+        console.warn(`❌ Model ${model} failed:`, error.message?.substring(0, 100));
+        lastError = error;
+        
+        // Check if model doesn't exist (404) - skip it and try next
+        const isNotFound = error.status === 404 || 
+                          error.message?.includes('not found') ||
+                          error.message?.includes('NOT_FOUND');
+        
+        if (isNotFound) {
+          console.log(`⏭️ Model ${model} not found. Trying next model...`);
+          continue; // Skip this model and try next one
+        }
+        
+        // Check if this is a quota/rate limit error - try next model
+        const isQuotaError = error.status === 429 || 
+                           error.message?.includes('quota') ||
+                           error.message?.includes('RESOURCE_EXHAUSTED') ||
+                           error.message?.includes('limit: 0');
+        
+        if (isQuotaError) {
+          console.log(`⏭️ Model ${model} has quota issues. Trying next model...`);
+          continue; // Try next model
+        }
+        
+        // If it's not a quota/availability/not found error, don't try other models
+        // (e.g., invalid API key, malformed request, etc.)
+        throw error;
+      }
+    }
+
+    // If all models failed, throw the last error
+    if (lastError) {
+      throw lastError;
+    } else {
+      throw new Error("All available models failed");
+    }
   } catch (error) {
-    console.error("Gemini Generation Error:", error);
+    console.error("Gemini Generation Error (all models failed):", error);
     console.error("Error details:", {
       message: error.message,
-      name: error.name
+      name: error.name,
+      status: error.status
     });
     
-    // If it's an API key error, provide helpful message
-    if (error.message?.includes('API_KEY') || error.message?.includes('401') || error.message?.includes('403')) {
-      console.error("⚠️  Invalid or missing GEMINI_API_KEY. Please check your .env file.");
+    // Handle quota/rate limit errors (429) - all models exhausted
+    if (error.status === 429 || 
+        error.message?.includes('429') ||
+        error.message?.includes('quota') ||
+        error.message?.includes('RESOURCE_EXHAUSTED') ||
+        error.message?.includes('Quota exceeded')) {
+      console.error("⚠️  Quota/Rate limit exceeded for all Gemini API models.");
+      
+      // Try to extract retry delay from error message
+      let retryMessage = "Please try again later.";
+      const retryMatch = error.message?.match(/retry in ([\d.]+)s/i) || 
+                        error.message?.match(/retryDelay["']:\s*["'](\d+)s/i);
+      if (retryMatch) {
+        const seconds = Math.ceil(parseFloat(retryMatch[1]));
+        retryMessage = `Please retry in ${seconds} seconds.`;
+      }
+      
+      throw new Error(`QUOTA_EXCEEDED: ${retryMessage} All available models have reached their quota limits. Consider upgrading your plan or checking your quota at https://ai.dev/usage?tab=rate-limit`);
     }
     
-    // Fallback to mock if API fails
-    console.warn("Falling back to mock code generator...");
-    return generateMockCode(tables, relations, dbType);
+    // If it's an API key error, throw it so the route handler can return proper error
+    if (error.message?.includes('API_KEY') || 
+        error.message?.includes('401') || 
+        error.message?.includes('403') ||
+        error.message?.includes('Invalid') ||
+        error.message?.includes('authentication') ||
+        error.status === 401 ||
+        error.status === 403) {
+      console.error("⚠️  Invalid or missing GEMINI_API_KEY.");
+      throw new Error("INVALID_API_KEY: " + (error.message || "Invalid or expired API key"));
+    }
+    
+    // For other errors, also throw to let route handler decide
+    throw error;
   }
 };
 

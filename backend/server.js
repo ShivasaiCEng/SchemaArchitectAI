@@ -1,78 +1,81 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import connectDB from './config/db.js';
 import schemaRoutes from './routes/schemaRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 
-// Get the directory name for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load environment variables from .env file in the backend directory
-const envResult = dotenv.config({ path: join(__dirname, '.env') });
-if (envResult.error) {
-  console.error('❌ Error loading .env file:', envResult.error);
-} else {
-  console.log('✅ Environment variables loaded from .env file');
-}
-
-// Connect to MongoDB
-if (process.env.MONGO_URI) {
-  connectDB();
-} else {
-  console.warn('⚠️  MONGO_URI not found in environment variables. Authentication will not work properly.');
-  console.warn('   Please add MONGO_URI to your .env file');
+/**
+ * Load environment variables
+ * - Local: loads from .env
+ * - Render/Production: uses Dashboard env vars
+ */
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
 }
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// Middleware
-app.use(cors());
+/**
+ * Connect to MongoDB
+ */
+if (process.env.MONGO_URI) {
+  connectDB();
+} else {
+  console.warn('⚠️  MONGO_URI not found. Database features disabled.');
+}
+
+/**
+ * Middleware
+ */
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+  })
+);
+
 app.use(express.json());
 
-// Routes
+/**
+ * Health check
+ */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'SchemaArchitect API is running' });
 });
 
-// Authentication routes
+/**
+ * Routes
+ */
 app.use('/api/auth', authRoutes);
-
-// Schema generation routes
 app.use('/api', schemaRoutes);
 
-// Catch-all route for non-API requests
-app.get('*', (req, res) => {
-  res.status(404).json({ 
+/**
+ * 404 handler
+ */
+app.use((req, res) => {
+  res.status(404).json({
     error: 'Not Found',
-    message: 'This is the API server. Please access the frontend at http://localhost:5173',
-    apiRoutes: [
+    message: 'This is the API server',
+    availableRoutes: [
       'GET /api/health',
       'POST /api/generate'
     ]
   });
 });
 
-// Start server
+/**
+ * Start server
+ */
 app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📡 API Health: http://localhost:${PORT}/api/health`);
-  if (process.env.MONGO_URI) {
-    console.log(`🗄️  MongoDB: Connection will be established...`);
-  } else {
-    console.log(`⚠️  MongoDB: Not configured (add MONGO_URI to .env)`);
-  }
-  if (process.env.GEMINI_API_KEY) {
-    console.log(`🤖 Gemini API: Configured (code generation enabled)`);
-  } else {
-    console.log(`⚠️  Gemini API: Not configured (add GEMINI_API_KEY to .env for AI code generation)`);
-    console.log(`   Will use mock code generator instead`);
-  }
-  console.log(`\n💡 Frontend should be accessed at: http://localhost:5173`);
-  console.log(`   Make sure to run 'npm run dev:frontend' in another terminal\n`);
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`📡 Health: /api/health`);
+  console.log(
+    `🗄️  MongoDB: ${process.env.MONGO_URI ? 'Configured' : 'Not configured'}`
+  );
+  console.log(
+    `🌐 Frontend: ${process.env.FRONTEND_URL || 'Not restricted'}`
+  );
 });
-

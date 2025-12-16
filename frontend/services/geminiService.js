@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { DatabaseType } from "../types.js";
+import { getApiUrl } from "../config/api.js";
 
 // Helper to construct the system prompt
 const getSystemInstruction = (dbType) => `
@@ -118,7 +119,7 @@ export const generateBackendCode = async (
       throw new Error('API_KEY_REQUIRED');
     }
     
-    const response = await fetch('http://localhost:5000/api/generate', {
+    const response = await fetch(getApiUrl('/api/generate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

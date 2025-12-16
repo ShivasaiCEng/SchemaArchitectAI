@@ -17,6 +17,7 @@ import ThemeToggle from './components/ThemeToggle.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
 import { generateBackendCode } from './services/geminiService.js';
 import { LayoutTemplate, Undo, Redo, HelpCircle, Database, Play, Layers, User as UserIcon, LogOut } from 'lucide-react';
+import { getApiUrl } from './config/api.js';
 
 function AppContent() {
   const { isDark } = useTheme();
@@ -109,7 +110,7 @@ function AppContent() {
     
     if (token && savedUser) {
       // Verify token with backend
-      fetch('http://localhost:5000/api/auth/verify', {
+      fetch(getApiUrl('/api/auth/verify'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

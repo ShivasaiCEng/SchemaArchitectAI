@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { X, Mail, Lock, User as UserIcon, ArrowRight, Loader2 } from 'lucide-react';
+import { getApiUrl } from '../config/api.js';
 
 const AuthModal = ({ mode, onClose, onAuthSuccess, onSwitchMode }) => {
   const { isDark } = useTheme();
@@ -36,7 +37,7 @@ const AuthModal = ({ mode, onClose, onAuthSuccess, onSwitchMode }) => {
         : { email, password };
 
       // Call backend API
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const response = await fetch(getApiUrl(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

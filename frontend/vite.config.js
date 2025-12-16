@@ -7,16 +7,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const apiBaseUrl = env.VITE_API_BASE_URL || 'http://localhost:5000';
+    
     return {
       server: {
         port: 5173,
         host: '0.0.0.0',
-        proxy: {
-          '/api': {
-            target: 'http://localhost:5000',
-            changeOrigin: true,
+        // Only use proxy in development when using localhost
+        ...(apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1') ? {
+          proxy: {
+            '/api': {
+              target: apiBaseUrl,
+              changeOrigin: true,
+            }
           }
-        }
+        } : {})
       },
       plugins: [react()],
       define: {

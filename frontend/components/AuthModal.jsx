@@ -67,7 +67,11 @@ const AuthModal = ({ mode, onClose, onAuthSuccess, onSwitchMode }) => {
       onAuthSuccess(data.user);
     } catch (err) {
       console.error('Auth error:', err);
-      setError('Network error. Please check if the backend server is running.');
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('CORS')) {
+        setError('Cannot connect to server. Please check your internet connection or contact support.');
+      } else {
+        setError('Network error. Please check if the backend server is running.');
+      }
       setIsLoading(false);
     }
   };

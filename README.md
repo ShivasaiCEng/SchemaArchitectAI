@@ -1,7 +1,3 @@
-Below is your **same README**, with a **new “Demo & Website” section added** in a clean, recruiter-friendly way.
-I did **not change anything else**.
-
-You can paste this **directly** into your README.
 
 ---
 
@@ -181,13 +177,3 @@ cd ../backend && npm install
 
 ---
 
-###  Tip (Recruiter POV)
-
-Having **Live Website + Demo Video** massively increases shortlist chances.
-If you want, I can:
-
-* Write a **1-line resume description**
-* Add **screenshots section**
-* Optimize this README for **ATS + internships**
-
-Just tell me 👍

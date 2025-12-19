@@ -10,7 +10,7 @@ It simplifies schema planning, accelerates backend development, and reduces boil
 
 ---
 
-## 🚀 Overview
+##  Overview
 
 * Visual database schema designer
 * AI-powered backend code generation
@@ -124,11 +124,11 @@ schemaarchitect-ai/
 * **Backend URL:** [http://localhost:5000](http://localhost:5000) (API only)
 
 ❌ If you see **"Cannot GET /"**, you are opening the backend directly.
-👉 Always open the **frontend URL**.
+ Always open the **frontend URL**.
 
 ---
 
-## 🧰 Prerequisites
+##  Prerequisites
 
 * Node.js **v18+**
 * npm or yarn
@@ -136,7 +136,7 @@ schemaarchitect-ai/
 
 ---
 
-## 📦 Installation
+##  Installation
 
 ### Install everything at once (recommended)
 
@@ -161,7 +161,7 @@ npm install
 
 ---
 
-## ▶️ Running the Application
+##  Running the Application
 
 ### Development Mode (Frontend + Backend)
 
@@ -196,7 +196,7 @@ cd backend && npm run dev
 
 ---
 
-## 🔐 Environment Variables
+##  Environment Variables
 
 ### Backend (`backend/.env`)
 
@@ -247,17 +247,17 @@ VITE_GEMINI_API_KEY=your_api_key_here
 
 ---
 
-## ✨ Features
+##  Features
 
-* 🎨 Visual schema designer
-* 🔄 Real-time collaboration
-* 📦 Backend code generation
+*  Visual schema designer
+*  Real-time collaboration
+*  Backend code generation
 
   * MongoDB
   * PostgreSQL
   * MySQL
-* 🧪 API sandbox testing
-* 📱 Fully responsive UI
+*  API sandbox testing
+*  Fully responsive UI
 
 ---
 
